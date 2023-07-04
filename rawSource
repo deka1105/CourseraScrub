@@ -1,0 +1,138 @@
+from selenium import webdriver
+from selenium.webdriver.common.action_chains import ActionChains
+import time
+import re
+from datetime import date
+from selenium.webdriver.common.keys import Keys
+import pandas as pd
+from timer import Timer
+
+appData = pd.read_excel(r'/Users/shubhamarundekatey/Downloads/CourseraBot/CourseLinks.xlsx', sheet_name='Sheet1')
+timer = Timer()
+driver = webdriver.Firefox(executable_path=r'/Users/shubhamarundekatey/Downloads/All/geckodriver_4') 
+# time.sleep(3)
+print(appData)
+appDataFrame = pd.DataFrame(columns=['Course', 'Week', 'TotalElements', 'IncompleteVideos', 'Assesments', 'IncompleteTotal'])
+
+
+
+def loginElement():
+    time.sleep(2)
+    driver.find_element_by_xpath('//input[@id="email"]').send_keys("dekateyshubham1105@gmail.com")
+    driver.find_element_by_xpath('//input[@id="password"]').send_keys("shubham@Coursera1")
+    time.sleep(2)
+    driver.find_element_by_xpath('//button[@type="submit"]').click()
+# loginElement()
+
+def getCourses():
+    driver.get("https://www.coursera.org/in-progress")
+    flag = 1
+    time.sleep(5)
+    driver.find_element_by_xpath('//button[@data-track-component="pagination_number_box_1"]').click()
+    while(flag == 1):
+        time.sleep(5)
+        courseList = driver.find_elements_by_class_name("card-title")
+        courseLinkList = driver.find_elements_by_xpath('//a[@data-track-component="course_card_course_title_link"]')#.get_attribute('outerHTML')
+        for course in range(0, len(courseList)):
+            courseName = courseList[course].get_attribute('innerHTML')
+#             print(courseName)
+            li_nk = courseLinkList[course].get_attribute('outerHTML')
+            link = ("https://www.coursera.org"+(li_nk[li_nk.find('href="')+6:])[:(li_nk[li_nk.find('href="')+6:]).find('"')])
+#             print(link)
+            progress = driver.find_elements_by_xpath('//span[@class = "cds-119 css-j2b34a cds-121"]')[course].get_attribute('innerHTML')
+#             print(course, courseName, progress)
+            courseData.loc[len(courseData.index)] = [courseName, link, progress]
+        if(-1 < driver.find_element_by_xpath('//button[@data-track-component="pagination_right_arrow"]').get_attribute('outerHTML').find('disabled=')):
+            flag = 0
+        else:
+            driver.find_element_by_xpath('//button[@data-track-component="pagination_right_arrow"]').click()
+
+courseData = pd.DataFrame(columns=['Name', 'Link', "Progress"])
+getCourses()
+courseData.to_excel(r'/Users/shubhamarundekatey/Downloads/CourseraBot/CourseLinkData7.xlsx')
+
+
+def processCourse(link, name):
+    print(name)
+    driver.get(link)
+    time.sleep(5)
+    weekCount = len(driver.find_elements_by_xpath('//a[@data-test="rc-WeekNavigationItem"]'))
+    print("Week # :", weekCount)
+    for week in range(0, weekCount):
+        print("Week: ", week, "/", weekCount)
+        (driver.find_elements_by_xpath('//a[@data-test="rc-WeekNavigationItem"]')[week].click())
+        time.sleep(5)
+        ls = driver.find_elements_by_xpath('//p[@data-test="rc-ItemName"]')
+        print(len(ls))
+        time.sleep(3)
+        incompleteVideo = 0
+        incTotal = 0
+        assesments = 0
+        for lecture in range(0, len(ls)):
+            ls[lecture].click()
+            time.sleep(3)
+            if 1 == tryXpath('//button[@aria-label="Play Video"]'):
+#                 print("Video Lecture")
+                driver.find_element_by_xpath('//button[@aria-label="Play Video"]').click()
+                time.sleep(3)
+                try:
+                    seekToEnd()
+                except:
+#                     print("Unable to seek video")
+                    incompleteVideo += 1
+            elif 1 == tryXpath('//button[@data-testid="mark-complete"]'):
+#                 print("Reading")
+                driver.find_element_by_xpath('//button[@data-testid="mark-complete"]').click() 
+            else:
+                assesments += 1
+            incTotal = incompleteVideo + assesments
+            
+            time.sleep(2)
+            driver.back()
+            ls = driver.find_elements_by_xpath('//p[@data-test="rc-ItemName"]')
+        appDataFrame.loc[len(appDataFrame.index)] = [name, week, len(ls), incompleteVideo, assesments, incTotal]
+processCourse("https://www.coursera.org/learn/technical-support-fundamentals/home/week/1","Technical Support Fundamentals")
+
+
+# dekateyshubham1105@gmail.com
+# shubham@Coursera1
+def initiate(appData):
+    for link in range (0, len(appData)):
+#         if(int(re.sub(r'%', '', appData['Progress'][link])) < 40):
+        if(appData['Progress'][link] == '0%'):
+#             print(appData['Link'][link], " -- ", appData['Progress'][link])
+            processCourse(appData['Link'][link], appData['Name'][link])
+        else:
+            print(appData['Name'][link], " -+- ", appData['Progress'][link])
+        
+
+def tryXpath(xpath):
+    try:
+        driver.find_element_by_xpath(xpath)
+#         print("Success")
+        return 1
+    except:
+#         print("Fail")
+        return 0
+    else:
+        return -1
+
+def seekToEnd():
+    time.sleep(3)
+    lastSeekCaption = len(driver.find_elements_by_xpath('//div[@class="rc-Phrase css-ugczj4"]')) 
+    if lastSeekCaption > 10:
+        for caption in range(10, lastSeekCaption):
+            driver.find_elements_by_xpath('//div[@class="rc-Phrase css-ugczj4"]')[caption].click()
+            driver.execute_script("window.scrollBy(0,document.body.scrollHeight)")
+            if caption+10 < lastSeekCaption:
+                caption+=10
+    driver.find_elements_by_xpath('//div[@class="rc-Phrase css-ugczj4"]')[lastSeekCaption-1].click()
+    time.sleep(5)
+courseData.head(5)#['Name'][1]
+
+
+time.sleep(5)
+initiate(courseData)
+# appDataFrame = pd.DataFrame(columns=['Course', 'Week', 'TotalElements', 'IncompleteVideos', 'Assesments', 'IncompleteTotal'])
+appDataFrame
+appDataFrame.to_excel(r'/Users/shubhamarundekatey/Downloads/CourseraBot/OutPut7.xlsx')
